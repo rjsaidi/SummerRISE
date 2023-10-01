@@ -1,0 +1,360 @@
+---
+title: "Summer RISE Project"
+author: Joshewa Assefa, Rohun Sarkar, and Tarun Tammali
+output: html_document
+date: "2023-07-21"
+---
+
+
+## Introduction about the project
+
+Access to clean water is a fundamental human right and a critical determinant of public health, economic development, and environmental sustainability. However, water access has been a longstanding challenge for many regions around the world. Having access to drinking water has numerous impacts on a population. We aimed to look into these impacts as well as look for trends in access to drinking water over time.
+
+The variables we explored included:
+
+-   life expectancy
+
+-   birth rate
+
+-   percent access to water
+
+-   neonatal mortality rate
+
+-   World Bank defined global regions
+
+-   World Bank defined income groups
+
+OECD is a particular category which stands for Organization for Economic Cooperation and Development.
+
+## Load the libraries and the dataset
+
+```{r message=FALSE}
+library(tidyverse)
+library(plotly)
+library(RColorBrewer)
+setwd("C:/Users/rsaidi/Dropbox/Rachel/MontColl/Summer RISE/2023") 
+water <- read_csv("water.csv")
+```
+
+## First, remove na's from region and explore the categorical variables
+
+```{r}
+water2 <- water %>% 
+  filter(!is.na(lifeexpectancy) & !is.na(region)) %>%
+  filter(income != "Not classified")
+water2$pop_mil <- water2$population/10^6
+```
+
+## Initialize mapping data
+
+```{r message=FALSE}
+require("maps")
+world_map <- map_data("world")
+
+world <- map_data("world") %>%
+  group_by(group) %>%
+  reframe(long2 = mean(long), lat2 = mean(lat), region) %>%
+  ungroup() %>%
+  dplyr::select("long2", "lat2", "region") %>%
+  distinct(region, .keep_all = TRUE) %>%
+  rename("country" = "region")
+
+water14 <- water2 %>% filter(year == 2014)
+water_latlong <- left_join(water14, world, by = "country")
+```
+
+## Create a map of percent access to drinking water in 2014
+
+```{r warning = FALSE}
+map <- ggplot() +
+  geom_map(data = world_map, map = world_map, aes(long, lat, map_id = region),
+           color = "white", fill = "lightgray", size = 0.1)+
+  geom_point(data = water_latlong,
+              aes(long2, lat2, color = percent_access), alpha = 0.7)+ 
+  scale_color_continuous( low = "#eb91ca", high = "#4f0735")
+```
+
++-----------------------------------------------------------------------+---------------------------------------------------------------------------------------+
+| World Bank Defined Regions                                            | Access to Drinking Water in 2014                                                      |
+|                                                                       |                                                                                       |
+| ![](World-Bank-regions.png){fig-alt="world bank regions" width="305"} | ![](percent%20access%20to%20water.PNG){fig-alt="percent access to water" width="346"} |
++=======================================================================+=======================================================================================+
+|                                                                       |                                                                                       |
++-----------------------------------------------------------------------+---------------------------------------------------------------------------------------+
+
+## Create palette for the regions
+
+```{r}
+cols <- c("Latin America & Caribbean" = "#14c78f", 
+                              "South Asia" = "#c6b90a",
+                              "Sub-Saharan Africa" = "#52340e",
+                              "Europe & Central Asia" = "#bf0ac0" ,
+                              "Middle East & North Africa" = "#73a409",
+                              "East Asia & Pacific" = "#9c024c",
+                              "North America" = "#0c52ee")
+```
+
+## Create linear model to explore important variables
+
+```{r}
+fit1 <- lm(lifeexpectancy ~ year + region + income + percent_access + neonat_mortal_rate + birth_rate, data = water2)
+summary(fit1)
+```
+
+Fit 1: Year, income, and region are all important variables for life expectancy, with the only exceptions being upper middle income, which is slightly less significant, but still important, and the region of North America, which was considered to be highly unimportant. We will investigate these two outliers as well as determine how year, income level, and region have all contributed to dramatic changes in life expectancy.
+
+------------------------------------------------------------------------
+
+```{r}
+fit2 <- lm(percent_access ~ year + income + neonat_mortal_rate + birth_rate + lifeexpectancy, data = water2)
+summary(fit2)
+```
+
+Fit 2: Income level, life expectancy, and birth rate were all important variables in determining the percent of people with access to clean drinking water. Two variables that were determined to be unimportant were Upper Middle Income and Year. The year may have been determined to be unimportant because the change in percent access throughout the years was mostly constant. This slow change in percent access may also be seen in upper middle income
+
+------------------------------------------------------------------------
+
+## Create boxplots of life expectancy by regions
+
+```{r}
+ggplot(water2, aes(x=region, y=lifeexpectancy))+
+  geom_boxplot(aes(fill  = region)) + 
+  geom_jitter(aes(x=region, y=lifeexpectancy), alpha = 0.1)+
+  scale_fill_manual(values = cols)+
+  coord_flip()+
+  theme_minimal() +
+  labs(x = "World Bank Global Regions",
+       y = "Life Expectancy in Years",
+       title = "Life Expectancy Years by Regions",
+       caption = "Source: World Bank")
+```
+
+Europe and North America have the highest median life expectancy which could be the result of a better health care system compared to the rest of the world. It is hard not to assume that the drastic difference in life expectancy between the majority of the world and Sub-Saharan Africa is due to the poor living conditions, low access to clean drinking water, and a sufficient health care system. Sub-Saharan Africa's low life expectancy could be attributed to the poor public infrastructure that plagues that region to due mass corruption and poor spending. It is hard to believe that all these factors have resulted in people living only between an average of 50-60 years instead of the 70-80 years that the rest of the world has.
+
+## Create a variable for mean life expectancy for each year and region
+
+```{r}
+water3 <- water2 %>%
+  group_by(year, region) %>%
+  reframe(mean_lifeexp = mean(lifeexpectancy), income)
+```
+
+```{r}
+plot1 <- ggplot(water3, aes(x=year, y=mean_lifeexp, color = region))+
+  geom_line()+
+  facet_wrap(~income)+
+  scale_color_manual(values = cols)+
+  theme_minimal()+
+  labs(x="Years from 2000 to 2014",
+       y="Average Life Expectancy over World Regions",
+       title = "Mean Life Expectancy over Years 2000-2014 Across Regions and Incomes",
+       caption = "Source: World Bank")
+plot1
+```
+
+This visual depiction presents the average life expectancy across various world regions and income groups from 2000 to 2014. Throughout this period, all regions experienced an increase in life expectancy across all income groups. However, the primary focus is on Sub-Saharan Africa, where significant improvements were discovered.
+
+From 2000 to 2014, most income groups in Sub-Saharan Africa had an average life expectancy of around 50 years. Over time, the region witnessed substantial progress, and by 2014, the average life expectancy had climbed to approximately 60 years.
+
+## Create an inital graph of neonatal mortality and percent asscess to water
+
+```{r}
+plot2 <- water2 %>%
+  ggplot(aes(neonat_mortal_rate, percent_access, color = region,
+            text = paste0("Country: ", country, "<br>" , "Year: ", year)), alpha =0.5)+
+  scale_color_manual(values = cols)+
+  geom_point(size = 0.1)+
+  facet_wrap(~income)+
+  theme_bw() +
+  labs(title = "Neonatal mortality and percent access to water based on income groups",
+       caption = "Source: World Bank")
+plot2
+```
+
+This graph is meant to compare percent neonatal mortality to percent access to water among different income groups and throughout all regions. If you consider percent access to water as an indicator of a basic health care system it can very clearly be seen that basic health care is mainly in Europe & Central Asia along with North America while the rest of the world seems to struggle with acquiring basic health care. Below are separate graphs to show how percent access to water has changed from 2000-2014 across different income groups.
+
+
+
+## High income
+
+```{r warning = FALSE}
+plot_hi <- water2 %>%
+  filter(income == "High income") %>%
+  ggplot(aes(percent_access, neonat_mortal_rate, color = region, 
+             text = paste0("Country: ", country, "<br>", "Year: ", year)))+
+  scale_color_manual(values = cols)+
+  geom_point(aes(size = pop_mil, frame = year, ids = country))+
+  scale_x_log10()+
+  theme_bw()+
+    labs(x = "Percent Access (% out of 100)", 
+      y = "Neonatal Mortality Rate (per 1,000 lives)",
+      title = "High Income: Percent Access vs Neonatal Mortality Rate 2014",
+      caption = "Source: World Bank")
+ggplotly(plot_hi)
+```
+
+## Low income
+
+```{r warning = FALSE}
+plot_low <- water2 %>%
+  filter(income == "Low income") %>%
+  ggplot(aes(percent_access, neonat_mortal_rate, color = region,
+             text = paste0("Country: ", country, "<br>" , "Year: ", year)))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_point(aes(size = pop_mil, frame = year, ids = country))+
+  scale_x_log10()+
+  theme_bw()+
+    labs(x = "Percent Access (% out of 100)", 
+      y = "Neonatal Mortality Rate (per 1,000 lives)",
+      title = "Low Income: Percent Access vs Neonatal Mortality Rate",
+      caption = "Source: World Bank")
+ggplotly(plot_low)
+```
+
+## Lower middle income
+
+```{r warning=FALSE}
+plot_low_mid <- water2 %>%
+  filter(income == "Lower middle income") %>%
+  ggplot(aes(percent_access, neonat_mortal_rate, color = region,
+             text = paste0("Country: ", country, "<br>" , "Year: ", year)))+
+  scale_color_manual(values = cols)+
+geom_point(aes(size = pop_mil, frame = year, ids = country))+
+  scale_x_log10()+
+  theme_bw()+
+    labs(x = "Percent Access (% out of 100)", 
+      y = "Neonatal Mortality Rate (per 1,000 lives)",
+      title = "Lower Middle Income: Percent Access vs Neonatal Mortality Rate",
+      caption = "Source: World Bank")
+ggplotly(plot_low_mid)
+```
+
+## Upper middle income
+
+```{r warning=FALSE}
+plot_up_mid <- water2 %>%
+  filter(income == "Upper middle income") %>%
+  ggplot(aes(percent_access, neonat_mortal_rate, color = region,
+             text = paste0("Country: ", country, "<br>" , "Year: ", year)))+
+  scale_color_manual(values = cols)+
+ geom_point(aes(size = pop_mil, frame = year, ids = country))+
+  scale_x_log10()+
+  theme_bw()+
+    labs(x = "Percent Access (% out of 100)", 
+      y = "Neonatal Mortality Rate (per 1,000 lives)",
+      title = "Upper Middle Income: Percent Access vs Neonatal Mortality Rate",
+      caption = "Source: World Bank")
+ggplotly(plot_up_mid)
+```
+
+## High income: OECD
+
+```{r}
+"High income: OECD"
+plot_high_oecd <- water2 %>%
+  filter(income == "High income: OECD") %>%
+  ggplot(aes(percent_access, neonat_mortal_rate, color = region))+
+  scale_color_manual(values = cols)+
+   geom_point(aes(size = pop_mil, frame = year, ids = country))+
+  scale_x_log10()+
+  theme_bw()+
+  labs(x = "Percent Access (% out of 100)", 
+      y = "Neonatal Mortality Rate (per 1,000 lives)",
+      title = "High Income OECD: Percent Access vs Neonatal Mortality Rate",
+      caption = "Source: World Bank")
+ggplotly(plot_high_oecd)
+```
+
+```{r}
+plot4 <- ggplot(water2, aes(x=percent_access, y=lifeexpectancy, color=region, size = pop_mil, text = paste0("Country: ", country)))+
+  geom_point(aes(frame = year), alpha = 0.7)+
+  theme_minimal()+
+  scale_color_manual(values = cols)+
+  labs(x="Percent Access to Water",
+       y="Average Life Expectancy over World Regions",
+       title = "Mean Life Expectancy from 2000 and 2014 \n Across Regions and Percent Access to Water",
+       caption = "Source: World Bank")
+ggplotly(plot4)
+```
+
+## Create a graph of mean life expectancy across regions and percent access to water
+
+```{r}
+water00_14 <- water2 %>%
+  filter(year %in% c(2000,2014))
+plot2 <- ggplot(water00_14, aes(x=percent_access, y=lifeexpectancy, color=region, size = pop_mil, text = paste0("Country: ", country)))+
+  geom_point(alpha = 0.7)+
+  scale_color_manual(values = cols)+
+  facet_wrap(~year)+
+  theme_minimal()+
+  labs(x="Percent Access to Water",
+       y="Average Life Expectancy over World Regions",
+       title = "Access to Water Across Regions")
+ggplotly(plot2)
+```
+
+This visualization highlights a significant increase of average life expectancy and percent access to water within the regions. For instance, let's consider Sub-Saharan Africa as a case study. In 2000, the region had an average of 58% access to water and a life expectancy of around 61 years. However, by 2014, the region experienced substantial progress, with access of water increasing to an average of 70% and a average age of 70 for life expectancy. Now, let's examine China, a populous nation. In 2000, China had 80% access to water and an average life expectancy of 71 years. Over the years, the country made significant strides. China reached 91% access to water and a average age of 76.
+
+Both these examples demonstrate the positive correlation between the increased access to water and improved life expectancy. The graph not only helps the audience better understand how society is advancing with more advanced technology but also enables us to make further predictions about how countries will develop in the future.
+
+## Compare mean life expectancy across regions between 2000 and 2014
+
+```{r}
+plot3 <- ggplot(water00_14, aes(x=lifeexpectancy, y=income, color=region, size = pop_mil))+
+  geom_point(alpha = 0.8)+
+  facet_wrap(~year)+
+  theme_minimal()+
+  scale_color_manual(values = cols)+
+  labs(x="Average Life Expectancy over World Regions",
+       y="Income",
+       title = "Mean Life Expectancy from 2000 and 2014 Across Regions and Income",
+       caption = "Source: World Bank")
+ggplotly(plot3)
+```
+
+It's important to note that every region has indeed experienced a boost in income, and Sub-Saharan Africa has generated significant attention for its progress. This region boasts a mix of upper-middle, lower-middle, and lower-income levels. It's worth highlighting that in 2000, life expectancy was a mere 40% to 55%, but we can now witness a marked improvement in 2014, with life expectancy ranging from 50% to 70%
+
+```{r}
+high_inc <- c("High income", "High income: OECD")
+water5 <- water2 %>%
+   mutate(Income_Level = case_when(
+     income %in% high_inc ~ "High Income",
+     income %in% "Lower middle income" ~ "Lower middle income",
+     income %in% "Upper middle income" ~ "Upper middle income",
+     income %in% "Low income" ~ "Low income"))
+```
+
+## Compare percent access to drinking water based on income
+
+```{r}
+plot5 <- ggplot(water5, aes(x=year, y = percent_access, color = Income_Level, text = paste0("Country: ", country)))+
+  geom_point()+
+  geom_jitter(aes(x = year, y = percent_access, color = Income_Level), alpha = 0.2)+
+  scale_color_brewer(palette = "Set1")+
+  labs(x = "Year",
+       y = "Percent Access to Water",
+       title = "Percent Access to Water Over Time per Country",
+       caption = "Source: World Bank") +
+  theme_minimal()
+ggplotly(plot5)  
+```
+
+This graph shows the percent access to water per country for each year from 2000 to 2014. The countries are colored by income level (Low, lower middle, upper middle, high). As expected, the countries with higher income have a higher percentage of their population with access to water. The countries in the upper middle and high income stayed in the same region of > 75% over the 14 year period. The lower income countries showed a positive trend over time, as some countries that had under 10% access to water in 2000 rose up to over 40% access to water by 2014. There are a few outliers in the data. Despite Equatorial Guinea being a high income country, they have a relatively low percentage of access to water (between 50% and 65%). This is likely due to the nation's corrupt government and failure to provide citizens with drinking water despite adequate resources.
+
+## Conclusion
+
+
+Over time, Sub-Saharan Africa has experienced an upward trend in both percent access to water and life expectancy, indicating positive developments in public health and well-being. Notably, low and lower middle income countries in the region have made significant strides in increasing the percentage of their population with access to clean water, demonstrating their commitment to improving basic infrastructure and living conditions.
+
+However, Equatorial Guinea stands out as a unique case within the Sub-Saharan region. Despite being classified as a high income country, it surprisingly lags behind in achieving a satisfactory level of percent access to water. This discrepancy raises concerns about the equitable distribution of resources and highlights the need for targeted interventions to address this disparity.
+
+A noteworthy observation is the correlation between lower percent access to water and an increased neonatal mortality rate across most regions, indicating the critical role that clean water plays in newborn health. However, an exception to this trend is observed within the High Income OECD group, suggesting that other factors or advanced healthcare systems in these countries might mitigate the adverse effects of limited water access on neonatal mortality.
+
+Overall, these trends underscore the importance of continued efforts to improve access to water, particularly in low and middle income countries, as it directly impacts various aspects of public health and well-being, contributing to progress and sustainable development in the Sub-Saharan African region and beyond.
+
+*This conclusion, based on bullet points we wrote, was generated by ChatGPT*
+
+
+## Summer RISE Project
+
+This project was the result of a data science exploration during the 2023 Summer RISE experience through MCPS and Montgomery College.
